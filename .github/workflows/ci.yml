@@ -1,0 +1,49 @@
+name: CI
+
+# Build + unit tests on all three desktop OSes, plus a quick fuzz-smoke pass
+# (standalone driver over the seed corpus under ASan/UBSan). Deeper
+# coverage-guided fuzzing lives in cflite_pr.yml / cflite_batch.yml.
+on: [push, pull_request]
+
+permissions: read-all
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DTAP_SOUNDFILE_BUILD_TESTS=ON
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  no-stdio-build:
+    # The embedded configuration must keep compiling: memory/callback IO only.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (TAP_SOUNDFILE_NO_STDIO)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DTAP_SOUNDFILE_NO_STDIO=ON -DTAP_SOUNDFILE_BUILD_TESTS=OFF
+      - name: Build
+        run: cmake --build build
+
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (fuzzers, Clang)
+        run: cmake -B build-fuzz -DTAP_SOUNDFILE_BUILD_FUZZERS=ON -DCMAKE_C_COMPILER=clang
+      - name: Build standalone driver
+        run: cmake --build build-fuzz --target fuzz_wav_standalone
+      - name: Replay + mutate seed corpus (ASan/UBSan)
+        run: ./build-fuzz/fuzz/fuzz_wav_standalone fuzz/corpus/*
+      - name: Short libFuzzer run
+        run: |
+          cmake --build build-fuzz --target fuzz_wav
+          ./build-fuzz/fuzz/fuzz_wav -max_total_time=60 -print_final_stats=1 fuzz/corpus
