@@ -56,11 +56,13 @@ TapHouse adoption is part of the initial scaffold, not a follow-up:
 - `style.yml` with the format gate plus the shared drift check, pinned to the current tag:
   `uses: tap/taphouse/.github/workflows/drift-check.yml@v5` / `ref: v5`.
 - The synced `.claude/settings.json` + session-start hook and the family PR template.
-- Open item to verify during scaffold: the `.clang-tidy` naming rules are C++-oriented
-  (`m_` members, PascalCase template params). snake_case functions/types apply cleanly to
-  C11; confirm the member-prefix rule behaves sensibly on plain structs (public struct
-  fields are not `m_` members) and record any needed exception the way OscTap's naming
-  exemption is recorded in STYLE.md.
+- ~~Open item~~ **Resolved during scaffold:** the `.clang-tidy` naming rules fit C11
+  as-is — public struct fields are bare `lower_case` (no `m_`; the prefix applies only to
+  private/protected members, which C doesn't have), functions/types are snake_case, and
+  enum constants are `lower_case` (hence `tap_sf_ok`, not `TAP_SF_OK` — matching
+  `converter_state::acquire`-style family precedent). No STYLE.md exception needed; the
+  single carve-out is a `NOLINT` on the POSIX feature-test macros (`_FILE_OFFSET_BITS`,
+  `_POSIX_C_SOURCE`), whose names the standard fixes.
 
 ## 3. Repository Layout
 
@@ -77,20 +79,19 @@ SoundFileTap/
 │       └── soundfile.hpp       # optional C++ convenience layer (tap::soundfile)
 ├── src/
 │   └── soundfile.c             # implementation; the ONLY TU that includes dr_wav.h
-├── external/
+├── third_party/
 │   ├── dr_wav.h                # vendored, unmodified
 │   ├── README.md               # provenance + licensing (see §9)
 │   ├── UPSTREAM_COMMIT         # pinned commit hash, one line
 │   └── update_upstream.sh      # fetches header(s) at a given commit, updates UPSTREAM_COMMIT
 ├── tests/
 │   ├── CMakeLists.txt          # GoogleTest via FetchContent, family pin (see §7)
-│   ├── test_soundfile.cpp      # C++ TUs testing the C API
-│   ├── make_corpus.py          # generates well-formed + pathological seed files
-│   └── corpus/                 # tiny (<10 KB) checked-in seeds only
+│   ├── test_soundfile.cpp      # C++ TUs testing the C API (WAVs built in memory)
+│   └── make_corpus.py          # generates the fuzz seed corpus, deterministically
 ├── fuzz/
 │   ├── fuzz_wav.c              # libFuzzer entry: bytes → tap_sf_open_memory
 │   ├── standalone_main.c       # driver for compilers without the libFuzzer runtime
-│   └── corpus/                 # seed corpus (shared with tests where sensible)
+│   └── corpus/                 # tiny (<10 KB) checked-in seeds; the one corpus location
 ├── .clusterfuzzlite/
 │   ├── Dockerfile
 │   ├── build.sh                # compiles harness with $CXX/$CFLAGS + $LIB_FUZZING_ENGINE,
@@ -180,7 +181,7 @@ Before handing anything to dr_wav, the wrapper must:
 
 ## 6. Upstream Management
 
-- `external/update_upstream.sh <commit>` downloads `dr_wav.h` from `mackron/dr_libs` at
+- `third_party/update_upstream.sh <commit>` downloads `dr_wav.h` from `mackron/dr_libs` at
   that commit (raw.githubusercontent.com), writes `UPSTREAM_COMMIT`, and prints a diff
   summary. (Written to take a file list, so adding `dr_flac.h` later is a one-line change.)
 - Initial pin: **latest upstream HEAD at time of repo creation** — must postdate the
@@ -252,22 +253,23 @@ Reuse the family's proven setup rather than a bespoke workflow:
 - This repo: **MIT**, copyright Timothy Place. Vendored dr_libs headers are dual-licensed
   public domain (Unlicense) / MIT-0 — compatible with redistribution. Keep upstream
   license text intact inside the vendored header; note provenance + pinned commit in
-  README and `external/README.md`.
+  README and `third_party/README.md`.
 
 ## 10. Deliverables Checklist
 
-- [ ] Repo scaffold per §3, MIT LICENSE, README with badges, purpose, quick-start,
+- [x] Repo scaffold per §3, MIT LICENSE, README with badges, purpose, quick-start,
       update procedure
-- [ ] TapHouse adoption per §2: sync configs, `style.yml` (format gate + drift check
-      @v5), pre-commit wiring, session-start hook; resolve the C11/clang-tidy open item
-- [ ] `tap/soundfile.h` / `src/soundfile.c` implementing §4 with all §5 hardening
-- [ ] `tap/soundfile.hpp` C++ convenience layer (`tap::soundfile`)
-- [ ] `update_upstream.sh` + initial vendored `dr_wav.h` pinned past the dr_wav
-      heap-OOB fix, `external/README.md` documenting provenance and licensing
-- [ ] GoogleTest unit tests + `make_corpus.py` per §7
-- [ ] `fuzz_wav.c` + `standalone_main.c` + `.clusterfuzzlite/` + both CFLite workflows
+- [x] TapHouse adoption per §2: sync configs, `style.yml` (format gate + drift check
+      @v5), pre-commit wiring, session-start hook; C11/clang-tidy open item resolved
+- [x] `tap/soundfile.h` / `src/soundfile.c` implementing §4 with all §5 hardening
+- [x] `tap/soundfile.hpp` C++ convenience layer (`tap::soundfile`)
+- [x] `update_upstream.sh` + initial vendored `dr_wav.h` pinned at `50bb723` (postdates
+      the dr_wav heap-OOB and 2026 malformed-file fixes; CVE-2025-14369 fix verified an
+      ancestor), `third_party/README.md` documenting provenance and licensing
+- [x] GoogleTest unit tests + `make_corpus.py` per §7
+- [x] `fuzz_wav.c` + `standalone_main.c` + `.clusterfuzzlite/` + both CFLite workflows
       per §8
-- [ ] `ci.yml` (3-OS build + tests + fuzz-smoke) and `upstream-check.yml`
+- [x] `ci.yml` (3-OS build + tests + fuzz-smoke + no-stdio build) and `upstream-check.yml`
 
 **Out of scope for v1:** FLAC (dr_flac is the larger attack surface and no consumer
 reads FLAC — add it behind the same API when a project needs it, with STREAMINFO

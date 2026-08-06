@@ -1,0 +1,57 @@
+name: Upstream check
+
+# dr_libs has no releases and no security advisories — fixes land as silent
+# commits. This weekly check compares upstream HEAD against our pinned commit
+# and maintains a single tracking issue listing whatever landed, substituting
+# for the advisory feed upstream doesn't have. Update procedure: see
+# third_party/README.md and third_party/update_upstream.sh.
+on:
+  schedule:
+    - cron: '0 7 * * 1'   # Mondays, 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare upstream HEAD against the pin
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pinned=$(tr -d '[:space:]' < third_party/UPSTREAM_COMMIT)
+          head=$(gh api repos/mackron/dr_libs/commits/HEAD --jq .sha)
+          echo "pinned: $pinned"
+          echo "head:   $head"
+          if [ "$pinned" = "$head" ]; then
+            echo "Pin is current."
+            exit 0
+          fi
+
+          # Build the issue body: the commits between the pin and HEAD.
+          {
+            echo "Upstream \`mackron/dr_libs\` HEAD is \`${head}\`; we pin \`${pinned}\`."
+            echo
+            echo "New commits since the pin:"
+            echo
+            gh api "repos/mackron/dr_libs/compare/${pinned}...${head}" \
+              --jq '.commits[] | "- `\(.sha[0:7])` \(.commit.message | split("\n")[0])"'
+            echo
+            echo "Review for security-relevant fixes (they are never announced), then"
+            echo "run \`third_party/update_upstream.sh ${head}\`, build, test, fuzz"
+            echo "briefly, and commit the new pin. See third_party/README.md."
+          } > body.md
+
+          title="dr_libs upstream has moved past the pinned commit"
+          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body-file body.md
+            echo "Updated issue #$existing"
+          else
+            gh issue create --title "$title" --body-file body.md
+          fi

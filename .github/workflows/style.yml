@@ -1,0 +1,37 @@
+name: Tap House Style
+
+# Enforces the shared Tap House Rules: (1) the clang-format layout gate via the
+# same pinned pre-commit hook developers run locally, (2) the drift check
+# against the canonical TapHouse configs, and (3) clang-tidy naming +
+# mandatory-braces enforcement over this repo's own TUs (the vendored
+# third_party/dr_wav.h is excluded — it is formatted upstream, never by us).
+on: [push, pull_request]
+
+permissions: read-all
+
+jobs:
+  clang-format:
+    name: clang-format (layout, pinned via pre-commit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - run: pipx install pre-commit && pre-commit run --all-files --show-diff-on-failure
+
+  drift:
+    uses: tap/taphouse/.github/workflows/drift-check.yml@v5
+    with:
+      ref: v5
+
+  clang-tidy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy-18 cmake python3
+      - name: clang-tidy (project TUs; third_party and fetched deps excluded)
+        run: |
+          TIDY_BUILD=build-tidy scripts/tidy.sh
+        env:
+          CLANG_TIDY: clang-tidy-18
