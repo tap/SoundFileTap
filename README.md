@@ -1,4 +1,4 @@
-# SoundFileTap
+# <picture><source media="(prefers-color-scheme: dark)" srcset=".github/icon-dark.svg"><img src=".github/icon-light.svg" width="40" height="40" alt="" align="top"></picture> SoundFileTap
 
 [![CI](https://github.com/tap/SoundFileTap/actions/workflows/ci.yml/badge.svg)](https://github.com/tap/SoundFileTap/actions/workflows/ci.yml)
 [![Tap House Style](https://github.com/tap/SoundFileTap/actions/workflows/style.yml/badge.svg)](https://github.com/tap/SoundFileTap/actions/workflows/style.yml)
