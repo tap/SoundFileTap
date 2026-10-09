@@ -19,9 +19,9 @@ jobs:
       - run: pipx install pre-commit && pre-commit run --all-files --show-diff-on-failure
 
   drift:
-    uses: tap/taphouse/.github/workflows/drift-check.yml@v6
+    uses: tap/taphouse/.github/workflows/drift-check.yml@v7
     with:
-      ref: v6
+      ref: v7
       icon: SoundFileTap
 
   clang-tidy:
